@@ -16,6 +16,7 @@ specific language governing permissions and limitations under the License.
 const browserStartTime = Date.now();
 
 import electron from 'electron';
+import os from 'os';
 
 import * as protocols from './protocols';
 import * as hotkeys from './hotkeys';
@@ -24,10 +25,13 @@ import * as instrument from '../services/instrument';
 import * as spawn from './spawn';
 import * as BW from './browser-window';
 import UserAgentClient from '../shared/user-agent-client';
+import { logger } from '../shared/logging';
+import { version as appVersion, name as appName } from '../../package.json';
 
 const app = electron.app; // control application life.
 const ipc = electron.ipcMain;
 const globalShortcut = electron.globalShortcut;
+const autoUpdater = electron.autoUpdater;
 const userAgentClient = new UserAgentClient();
 
 const appStartupTime = Date.now();
@@ -38,6 +42,16 @@ protocols.registerStandardSchemes();
 // Start the content and UA services running on a different process
 spawn.startContentService();
 spawn.startUserAgentService(userAgentClient);
+
+// Exe name is set to the same as the package name
+app.setAppUserModelId(`com.squirrel.${appName}.${appName}`);
+autoUpdater.setFeedURL(`http://tofino-update-server.herokuapp.com/update/${os.platform()}_${os.arch()}/${appVersion}`);
+
+autoUpdater.on('update-downloaded', () => {
+  logger.info('Downloaded an update!');
+});
+
+logger.info(`App version is ${appVersion}`);
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -54,6 +68,12 @@ app.on('ready', async function() {
   await BW.createBrowserWindow(userAgentClient, () => {
     instrument.event('browser', 'READY', 'ms', Date.now() - browserStartTime);
   });
+
+  try {
+    autoUpdater.checkForUpdates();
+  } catch (e) {
+    // This happens if the app isn't installed
+  }
 });
 
 // Unregister all shortcuts.
